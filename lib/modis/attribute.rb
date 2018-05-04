@@ -14,6 +14,14 @@ module Modis
       base.extend ClassMethods
       base.instance_eval do
         bootstrap_attributes
+
+        define_method(:attributes) do
+          attrs = {}
+          self.class.attributes.each_key do |key|
+            attrs[key] = instance_variable_get("@#{key}")
+          end
+          attrs
+        end
       end
     end
 
@@ -33,15 +41,15 @@ module Modis
 
       def attribute(name, type, options = {})
         name = name.to_s
-        raise AttributeError, "Attribute with name '#{name}' has already been specified." if attributes.key?(name)
+        raise AttributeError, "Attribute with name '#{name}' has already been specified." if @attributes.key?(name)
 
         type_classes = Array(type).map do |t|
           raise UnsupportedAttributeType, t unless TYPES.key?(t)
           TYPES[t]
         end.flatten
 
-        attributes[name] = options.update(type: type)
-        attributes_with_defaults[name] = options[:default]
+        @attributes[name] = options.update(type: type)
+        @attributes_with_defaults[name] = options[:default]
         define_attribute_methods([name])
 
         value_coercion = type == :timestamp ? 'value = Time.new(*value) if value && value.is_a?(Array) && value.count == 7' : nil
@@ -55,17 +63,17 @@ module Modis
 
         class_eval <<-RUBY, __FILE__, __LINE__ + 1
           def #{name}
-            attributes['#{name}']
+            @#{name}
           end
 
           def #{name}=(value)
             #{value_coercion}
 
             # ActiveSupport's Time#<=> does not perform well when comparing with NilClass.
-            if (value.nil? ^ attributes['#{name}'].nil?) || (value != attributes['#{name}'])
+            if (value.nil? ^ @#{name}.nil?) || (value != @#{name})
               #{type_check}
               #{name}_will_change!
-              attributes['#{name}'] = value
+              @#{name} = value
             end
           end
         RUBY
@@ -73,18 +81,17 @@ module Modis
     end
 
     def assign_attributes(hash)
-      hash.each do |k, v|
-        setter = "#{k}="
-        send(setter, v) if respond_to?(setter)
+      hash.each do |key, value|
+        instance_variable_set("@#{key}", value)
       end
     end
 
     def write_attribute(key, value)
-      attributes[key.to_s] = value
+      instance_variable_set("@#{key}", value)
     end
 
     def read_attribute(key)
-      attributes[key.to_s]
+      instance_variable_get("@#{key}")
     end
 
     protected
@@ -99,7 +106,9 @@ module Modis
     end
 
     def apply_defaults
-      @attributes = Hash[self.class.attributes_with_defaults]
+      self.class.attributes_with_defaults.each do |key, value|
+        instance_variable_set("@#{key}", value)
+      end
     end
   end
 end
