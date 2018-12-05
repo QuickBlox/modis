@@ -27,7 +27,6 @@ module Modis
 
     module ClassMethods
       def bootstrap_attributes(parent = nil)
-        attr_reader :attributes
 
         class << self
           attr_accessor :attributes, :attributes_with_defaults
